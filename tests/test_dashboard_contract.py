@@ -161,6 +161,13 @@ class DashboardContractTest(unittest.TestCase):
         self.assertIn("range_20ma", html)
         self.assertIn("unit", html)
         self.assertIn("customer", html)
+        self.assertIn("<strong>5001491</strong>", html)
+        self.assertIn("name='range_4ma' value='0'", html)
+        self.assertNotIn("UIDs", html)
+        self.assertNotIn("Rows", html)
+        self.assertNotIn("Config</div>", html)
+        self.assertNotIn("This page edits local config plus the JSON-RPC patch payload", html)
+        self.assertNotIn("Saved and published to ", html)
 
     def test_render_values_dashboard_uses_orange_layout_and_latest_readings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -189,6 +196,9 @@ class DashboardContractTest(unittest.TestCase):
         self.assertIn("16.000", html)
         self.assertIn("setInterval", html)
         self.assertIn("page=", html)
+        self.assertNotIn("Live Refresh", html)
+        self.assertNotIn("<div class='tile'><div class='label'>Rows</div>", html)
+        self.assertTrue(html.rfind("pager") > html.rfind("</table>"))
 
     def test_render_device_history_uses_pagination_and_live_refresh(self):
         with tempfile.TemporaryDirectory() as tmpdir:

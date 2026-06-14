@@ -320,7 +320,8 @@ def publish_apply_command(payload, uid, imei, settings):
 
 
 def _config_cell_input(row, field_name, input_type="text", readonly=False):
-    value = _html_escape(_form_value(row.get(field_name), ""))
+    fallback = "0" if field_name == "range_4ma" else ""
+    value = _html_escape(_form_value(row.get(field_name), fallback))
     attrs = " type='{type}' name='{name}' value='{value}' form='{form}'".format(
         type=input_type,
         name=field_name,
@@ -343,7 +344,7 @@ def _render_config_row(row):
             uid=_html_escape(_form_value(row.get("uid"), "")),
             location=_html_escape("{} {}".format(_form_value(row.get("lat"), ""), _form_value(row.get("long"), ""))),
         ),
-        "<td><input type='hidden' name='uid' value='{uid}' form='{form}'>".format(
+        "<td><strong>{uid}</strong><input type='hidden' name='uid' value='{uid}' form='{form}'>".format(
             uid=_html_escape(_form_value(row.get("uid"), "")),
             form=row_id,
         ),
@@ -394,14 +395,6 @@ def _rows_from_config(db_path):
 
 def render_config_dashboard_html(db_path, message=""):
     config_rows = _rows_from_config(db_path)
-    grouped_uids = []
-    seen = set()
-    for row in config_rows:
-        uid = row.get("uid", "")
-        if uid not in seen:
-            seen.add(uid)
-            grouped_uids.append(uid)
-    refresh_uid = config_rows[0].get("uid", "") if config_rows else ""
     parts = [
         "<!doctype html>",
         "<html><head><meta charset='utf-8'>",
@@ -473,21 +466,13 @@ def render_config_dashboard_html(db_path, message=""):
             "/",
             "Open values dashboard",
         ),
-        "<div class='summary'>",
-        "<div class='tile'><div class='label'>UIDs</div><div class='value'>{}</div></div>".format(len(grouped_uids)),
-        "<div class='tile'><div class='label'>Rows</div><div class='value'>{}</div></div>".format(len(config_rows)),
-        "<div class='tile'><div class='label'>Config</div><div class='value'>{}</div></div>".format(_html_escape(AIO_CONFIG_FILE_NAME)),
-        "</div>",
         "<div class='toolbar'>",
         "<div class='search-box'><label for='uid-filter'>Search UID</label><input id='uid-filter' oninput='filterConfigRows()' placeholder='5001491'></div>",
         "<div class='search-box'><label for='location-filter'>Search location</label><input id='location-filter' oninput='filterConfigRows()' placeholder='18.520 / 73.856'></div>",
         "</div>",
     ]
-    if message:
+    if message and not message.startswith("Saved and published to ") and not message.startswith("Read command sent to topic "):
         parts.append("<div class='note'>{}</div>".format(_html_escape(message)))
-    parts.append(
-        "<div class='note'>This page edits local config plus the JSON-RPC patch payload. Unit stays local and is not sent to the device.</div>"
-    )
     parts.append("<table class='config-table'><thead><tr>")
     for field_name, label in CONFIG_COLUMNS:
         parts.append("<th>{}</th>".format(_html_escape(label)))
@@ -499,7 +484,7 @@ def render_config_dashboard_html(db_path, message=""):
                 "channel": "AI1",
                 "lat": "",
                 "long": "",
-                "range_4ma": "",
+                "range_4ma": "0",
                 "range_20ma": "",
                 "unit": "",
                 "calibration_offset_ma": "",
@@ -656,10 +641,6 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
         ".search-box{background:#fff;border:2px solid #9f4d10;padding:10px 12px;min-width:280px;}",
         ".search-box label{display:block;font-size:14px;margin-bottom:6px;}",
         ".search-box input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #c46d23;background:#f9a64d;color:#fff;}",
-        ".summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;}",
-        ".tile{background:#fff;border:1px solid #f1c6a5;padding:12px 14px;}",
-        ".label{font-size:12px;color:#af611f;text-transform:uppercase;}",
-        ".value{font-size:20px;font-weight:bold;margin-top:6px;color:#a64910;}",
         ".value-table{width:100%;border-collapse:collapse;background:#fff;}",
         ".value-table th,.value-table td{border:1px solid #f1c6a5;padding:8px;vertical-align:top;font-size:13px;}",
         ".value-table th{background:#f07b24;color:#fff;text-align:left;}",
@@ -680,12 +661,6 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
         "<div class='search-box'><label for='uid-filter'>Search UID</label><input id='uid-filter' oninput='filterValueRows()' placeholder='5001491'></div>",
         "<div class='search-box'><label for='location-filter'>Search location</label><input id='location-filter' oninput='filterValueRows()' placeholder='18.520 / 73.856'></div>",
         "</div>",
-        "<div class='summary'>",
-        "<div class='tile'><div class='label'>Rows</div><div class='value'>{}</div></div>".format(len(rows)),
-        "<div class='tile'><div class='label'>Page</div><div class='value'>{}</div></div>".format(page),
-        "<div class='tile'><div class='label'>Live Refresh</div><div class='value'>on</div></div>",
-        "</div>",
-        _page_controls("/", page, per_page, total_rows),
         "<table class='value-table'><thead><tr>",
     ]
     for _, label in VALUE_COLUMNS:
@@ -696,6 +671,7 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
     else:
         parts.append(_render_values_rows(rows, config_map))
     parts.append("</tbody></table>")
+    parts.append(_page_controls("/", page, per_page, total_rows))
     parts.append(
         """
 <script>
@@ -764,7 +740,6 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
                 _html_escape(latest.get("long", "") or "-"),
             )
         )
-    parts.append(_page_controls("/device/{}".format(_html_escape(uid)), page, per_page, total_rows))
     parts.append("<h2>Recent Telemetry Samples</h2>")
     parts.append("<table class='value-table'><thead><tr>")
     for label in ["Observed Time", "Device Time", "Value", "RSSI", "Status", "Alarm"]:
@@ -775,6 +750,7 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
     else:
         parts.append(_render_history_rows(rows))
     parts.append("</tbody></table>")
+    parts.append(_page_controls("/device/{}".format(_html_escape(uid)), page, per_page, total_rows))
     parts.append("</body></html>")
     return "".join(parts)
 
