@@ -133,6 +133,40 @@ def _page_controls(base_path, page, per_page, total_rows, extra_params=None):
     )
 
 
+def _brand_logo_svg():
+    return """
+<svg class='brand-logo-svg' viewBox='0 0 520 160' xmlns='http://www.w3.org/2000/svg' aria-hidden='true' focusable='false'>
+  <rect width='520' height='160' fill='none'/>
+  <g>
+    <text x='0' y='96' font-family='Arial, Helvetica, sans-serif' font-size='106' font-weight='700' fill='#b3b5b8'>HP</text>
+    <circle cx='86' cy='58' r='10' fill='#e32a1f'/>
+    <text x='132' y='64' font-family='Arial, Helvetica, sans-serif' font-size='58' font-weight='300' fill='#9fa1a4'>Happy</text>
+    <text x='132' y='118' font-family='Arial, Helvetica, sans-serif' font-size='58' font-weight='300' fill='#9fa1a4'>Solutions</text>
+    <text x='102' y='150' font-family='Arial, Helvetica, sans-serif' font-size='24' font-style='italic' fill='#6f7175'>Experts of missing links</text>
+  </g>
+</svg>
+"""
+
+
+def _brand_header_html(main_title, subtitle, action_href, action_label):
+    return (
+        "<header class='brand-header'>"
+        "<div class='brand-action-wrap'><a href='{action_href}' class='action-link'>{action_label}</a></div>"
+        "<div class='brand-copy'>"
+        "<div class='brand-title'>{main_title}</div>"
+        "<div class='brand-subtitle'>{subtitle}</div>"
+        "</div>"
+        "<div class='brand-logo'>{logo}</div>"
+        "</header>"
+    ).format(
+        action_href=_html_escape(action_href),
+        action_label=_html_escape(action_label),
+        main_title=_html_escape(main_title),
+        subtitle=_html_escape(subtitle),
+        logo=_brand_logo_svg(),
+    )
+
+
 def _build_channel_object(row):
     return {
         "id": row.get("channel", "") or row.get("id", "") or "",
@@ -376,8 +410,14 @@ def render_config_dashboard_html(db_path, message=""):
         "<style>",
         "body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(180deg,#eef5ff 0%,#e4efff 100%);color:#16315b;}",
         ".shell{padding:22px 24px 36px;}",
-        ".hero{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}",
-        ".hero h1{margin:0;font-size:28px;color:#1f4f9b;}",
+        ".brand-header{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,1.2fr) minmax(220px,1fr);align-items:center;gap:16px;margin-bottom:18px;}",
+        ".brand-action-wrap{justify-self:start;}",
+        ".action-link{display:inline-block;padding:9px 14px;border-radius:999px;background:#ffffff;color:#1f4f9b;text-decoration:none;font-weight:bold;border:1px solid #b7c9ea;box-shadow:0 2px 8px rgba(31,79,155,0.08);}",
+        ".brand-copy{text-align:center;}",
+        ".brand-title{margin:0;font-size:30px;line-height:1.1;color:#1f4f9b;font-weight:700;}",
+        ".brand-subtitle{margin-top:6px;font-size:15px;line-height:1.2;color:#50678f;font-weight:600;letter-spacing:0.2px;}",
+        ".brand-logo{justify-self:end;max-width:320px;width:100%;}",
+        ".brand-logo svg{display:block;width:100%;height:auto;}",
         ".toolbar{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0 20px;}",
         ".search-box{background:#fff;border:2px solid #2a4b8d;padding:10px 12px;min-width:280px;}",
         ".search-box label{display:block;font-size:14px;margin-bottom:6px;}",
@@ -398,6 +438,7 @@ def render_config_dashboard_html(db_path, message=""):
         ".overlay{display:none;position:fixed;inset:0;background:rgba(22,35,59,0.6);z-index:9999;justify-content:center;align-items:center;flex-direction:column;color:#fff;}",
         ".spinner{width:48px;height:48px;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px;}",
         "@keyframes spin{to{transform:rotate(360deg);}}",
+        "@media (max-width: 900px){.brand-header{grid-template-columns:1fr;justify-items:center;}.brand-action-wrap,.brand-logo{justify-self:center;}.brand-copy{order:1;}.brand-action-wrap{order:2;}.brand-logo{order:3;max-width:260px;}.brand-title{font-size:26px;}.brand-subtitle{font-size:14px;}}",
         "</style>",
         "<script>",
         "function filterConfigRows(){",
@@ -426,7 +467,12 @@ def render_config_dashboard_html(db_path, message=""):
         "function hideSpinner(){ var overlay=document.getElementById('loading-overlay'); if(overlay){ overlay.style.display='none'; } }",
         "</script>",
         "</head><body data-theme='blue'><div class='shell'>",
-        "<div class='hero'><div><h1>AIO Configuration Dashboard</h1></div><a href='/' class='action-link'>Open values dashboard</a></div>",
+        _brand_header_html(
+            "Intelligent Pressure Logger Configuration",
+            "Model - Beetwin - HS",
+            "/",
+            "Open values dashboard",
+        ),
         "<div class='summary'>",
         "<div class='tile'><div class='label'>UIDs</div><div class='value'>{}</div></div>".format(len(grouped_uids)),
         "<div class='tile'><div class='label'>Rows</div><div class='value'>{}</div></div>".format(len(config_rows)),
@@ -598,8 +644,14 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
         "<style>",
         "body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(180deg,#fff8f2 0%,#fff1e2 100%);color:#31210f;}",
         ".shell{padding:22px 24px 36px;}",
-        ".hero{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}",
-        ".hero h1{margin:0;font-size:28px;color:#b45309;}",
+        ".brand-header{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,1.2fr) minmax(220px,1fr);align-items:center;gap:16px;margin-bottom:18px;}",
+        ".brand-action-wrap{justify-self:start;}",
+        ".action-link{display:inline-block;padding:9px 14px;border-radius:999px;background:#ffffff;color:#b45309;text-decoration:none;font-weight:bold;border:1px solid #f1c6a5;box-shadow:0 2px 8px rgba(180,83,9,0.08);}",
+        ".brand-copy{text-align:center;}",
+        ".brand-title{margin:0;font-size:30px;line-height:1.1;color:#b45309;font-weight:700;}",
+        ".brand-subtitle{margin-top:6px;font-size:15px;line-height:1.2;color:#8f561d;font-weight:600;letter-spacing:0.2px;}",
+        ".brand-logo{justify-self:end;max-width:320px;width:100%;}",
+        ".brand-logo svg{display:block;width:100%;height:auto;}",
         ".toolbar{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0 20px;}",
         ".search-box{background:#fff;border:2px solid #9f4d10;padding:10px 12px;min-width:280px;}",
         ".search-box label{display:block;font-size:14px;margin-bottom:6px;}",
@@ -614,10 +666,16 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
         ".value-row:nth-child(even){background:#fff7ef;}",
         ".pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0;}",
         ".pager a{color:#a94d10;text-decoration:none;font-weight:bold;}",
+        "@media (max-width: 900px){.brand-header{grid-template-columns:1fr;justify-items:center;}.brand-action-wrap,.brand-logo{justify-self:center;}.brand-copy{order:1;}.brand-action-wrap{order:2;}.brand-logo{order:3;max-width:260px;}.brand-title{font-size:26px;}.brand-subtitle{font-size:14px;}}",
         "</style>",
         _values_dashboard_script(),
         "</head><body data-theme='orange'><div class='shell'>",
-        "<div class='hero'><div><h1>AIO Values Dashboard</h1></div><a href='/config'>Open configuration</a></div>",
+        _brand_header_html(
+            "Intelligent Pressure Logger",
+            "Model - Beetwin - HS",
+            "/config",
+            "Open configuration",
+        ),
         "<div class='toolbar'>",
         "<div class='search-box'><label for='uid-filter'>Search UID</label><input id='uid-filter' oninput='filterValueRows()' placeholder='5001491'></div>",
         "<div class='search-box'><label for='location-filter'>Search location</label><input id='location-filter' oninput='filterValueRows()' placeholder='18.520 / 73.856'></div>",
