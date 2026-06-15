@@ -739,6 +739,10 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
         ".back-btn{display:inline-block;margin-bottom:18px;padding:8px 14px;background:#e36c12;color:#fff;border-radius:2px;}",
         "h1{margin:0 0 16px 0;font-size:28px;color:#b45309;}",
         "h2{margin:22px 0 12px 0;font-size:20px;color:#b45309;}",
+        ".summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:18px 0 20px;}",
+        ".tile{background:#fff;border:1px solid #f1c6a5;padding:12px 14px;}",
+        ".label{font-size:12px;color:#af611f;text-transform:uppercase;}",
+        ".value{font-size:20px;font-weight:bold;margin-top:6px;color:#a64910;word-break:break-word;}",
         ".value-table{width:100%;border-collapse:collapse;background:#fff;}",
         ".value-table th,.value-table td{border:1px solid #f1c6a5;padding:10px;vertical-align:top;font-size:13px;}",
         ".value-table th{background:#f07b24;color:#fff;text-align:left;}",
@@ -765,15 +769,16 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
         parts.append(
             "<div class='summary'>"
             "<div class='tile'><div class='label'>UID</div><div class='value'>{}</div></div>"
-            "<div class='tile'><div class='label'>Value</div><div class='value'>{}</div></div>"
             "<div class='tile'><div class='label'>Status</div><div class='value'>{}</div></div>"
-            "<div class='tile'><div class='label'>Location</div><div class='value' style='font-size:14px;word-break:break-all;'>{}<br>{}</div></div>"
+            "<div class='tile'><div class='label'>Lat</div><div class='value'>{}</div></div>"
+            "<div class='tile'><div class='label'>Long</div><div class='value'>{}</div></div>"
+            "<div class='tile'><div class='label'>Value</div><div class='value'>{}</div></div>"
             "</div>".format(
                 _html_escape(latest.get("uid", "")),
-                _html_escape(_form_value(latest.get("pv", ""))),
                 _html_escape(_status_state(latest)),
                 _html_escape(latest.get("lat", "") or "-"),
                 _html_escape(latest.get("long", "") or "-"),
+                _html_escape(_form_value(latest.get("pv", ""))),
             )
         )
     parts.append("<h2>Recent Telemetry Samples</h2>")
