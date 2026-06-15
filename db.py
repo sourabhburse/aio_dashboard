@@ -142,6 +142,13 @@ def save_telemetry(db_path, sample):
         conn.commit()
 
 
+def _normalize_text_value(value, default=""):
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text if text != "" else default
+
+
 def _normalize_config_row(uid, config_row):
     defaults = {
         "uid": uid or "",
@@ -167,24 +174,24 @@ def _normalize_config_row(uid, config_row):
     row = defaults.copy()
     row.update(config_row or {})
     row["uid"] = uid or row.get("uid", "")
-    row["channel"] = str(row.get("channel", "") or "").strip()
-    row["name"] = str(row.get("name", "") or "").strip()
-    row["device_imei"] = str(row.get("device_imei", "") or "").strip()
-    row["lat"] = str(row.get("lat", "") or "").strip()
-    row["long"] = str(row.get("long", "") or "").strip()
-    row["range_4ma"] = str(row.get("range_4ma", "") or "").strip()
-    row["range_20ma"] = str(row.get("range_20ma", "") or "").strip()
-    row["calibration_offset_ma"] = str(row.get("calibration_offset_ma", "") or "").strip()
-    row["high_threshold"] = str(row.get("high_threshold", "") or "").strip()
-    row["low_threshold"] = str(row.get("low_threshold", "") or "").strip()
-    row["hysteresis"] = str(row.get("hysteresis", "") or "").strip()
-    row["unit"] = str(row.get("unit", "") or "").strip()
-    row["poll_cron"] = str(row.get("poll_cron", "") or "").strip()
-    row["publish_as"] = str(row.get("publish_as", "string") or "string").strip() or "string"
-    row["string_format"] = str(row.get("string_format", "%.3f") or "%.3f").strip() or "%.3f"
-    row["sensor_health_threshold_ma"] = str(row.get("sensor_health_threshold_ma", "") or "").strip()
-    row["sensor_health_hysteresis_ma"] = str(row.get("sensor_health_hysteresis_ma", "") or "").strip()
-    row["value_format"] = str(row.get("value_format", "string") or "string").strip() or "string"
+    row["channel"] = _normalize_text_value(row.get("channel", ""))
+    row["name"] = _normalize_text_value(row.get("name", ""))
+    row["device_imei"] = _normalize_text_value(row.get("device_imei", ""))
+    row["lat"] = _normalize_text_value(row.get("lat", ""))
+    row["long"] = _normalize_text_value(row.get("long", ""))
+    row["range_4ma"] = _normalize_text_value(row.get("range_4ma", ""))
+    row["range_20ma"] = _normalize_text_value(row.get("range_20ma", ""))
+    row["calibration_offset_ma"] = _normalize_text_value(row.get("calibration_offset_ma", ""))
+    row["high_threshold"] = _normalize_text_value(row.get("high_threshold", ""))
+    row["low_threshold"] = _normalize_text_value(row.get("low_threshold", ""))
+    row["hysteresis"] = _normalize_text_value(row.get("hysteresis", ""))
+    row["unit"] = _normalize_text_value(row.get("unit", ""))
+    row["poll_cron"] = _normalize_text_value(row.get("poll_cron", ""))
+    row["publish_as"] = _normalize_text_value(row.get("publish_as", "string"), "string") or "string"
+    row["string_format"] = _normalize_text_value(row.get("string_format", "%.3f"), "%.3f") or "%.3f"
+    row["sensor_health_threshold_ma"] = _normalize_text_value(row.get("sensor_health_threshold_ma", ""))
+    row["sensor_health_hysteresis_ma"] = _normalize_text_value(row.get("sensor_health_hysteresis_ma", ""))
+    row["value_format"] = _normalize_text_value(row.get("value_format", "string"), "string") or "string"
     row["updated_ts"] = int(time.time())
     return row
 

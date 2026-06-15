@@ -176,6 +176,50 @@ class DeviceConfigSyncTest(unittest.TestCase):
 
         self.assertEqual(rows[0]["unit"], "Bar")
 
+    def test_process_config_payload_preserves_zero_values(self):
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "name": "customer",
+                "content": json.dumps(
+                    {
+                        "UID": "5001491",
+                        "channels": [
+                            {
+                                "id": "AI1",
+                                "name": "pv",
+                                "unit": "Bar",
+                                "range_4ma": 0.0,
+                                "range_20ma": 10.0,
+                                "calibration_offset_ma": 0.0,
+                                "high_threshold": 0.0,
+                                "low_threshold": 0.0,
+                                "hysteresis": 0.0,
+                            }
+                        ],
+                    }
+                ),
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = tmpdir + "/dashboard.sqlite3"
+            init_db(db_path)
+            process_config_payload(
+                db_path,
+                json.dumps(payload),
+                topic="device/5001491/rpc/res",
+                file_name="customer",
+            )
+            rows = list_device_configs(db_path, uid="5001491")
+
+        self.assertEqual(rows[0]["range_4ma"], "0.0")
+        self.assertEqual(rows[0]["calibration_offset_ma"], "0.0")
+        self.assertEqual(rows[0]["high_threshold"], "0.0")
+        self.assertEqual(rows[0]["low_threshold"], "0.0")
+        self.assertEqual(rows[0]["hysteresis"], "0.0")
+
 
 if __name__ == "__main__":
     unittest.main()
