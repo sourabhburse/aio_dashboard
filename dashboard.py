@@ -1,8 +1,11 @@
 import copy
+import base64
 import json
 import math
 import os
 from datetime import datetime, timezone, timedelta
+from functools import lru_cache
+from pathlib import Path
 from urllib.parse import parse_qs
 
 from aio_dashboard.db import (
@@ -29,7 +32,8 @@ VALUE_COLUMNS = [
     ("uid", "UID Number"),
     ("observed_ts", "Last received data"),
     ("pv", "Value"),
-    ("sh", "Status"),
+    ("unit", "Unit"),
+    ("sh", "Sensor Status"),
     ("rssi", "RSSI"),
     ("alarm_state", "Alarm"),
     ("high_alarm", "High Alarm"),
@@ -133,22 +137,23 @@ def _page_controls(base_path, page, per_page, total_rows, extra_params=None):
     )
 
 
-def _brand_logo_svg():
-    return """
-<svg class='brand-logo-svg' viewBox='0 0 520 160' xmlns='http://www.w3.org/2000/svg' aria-hidden='true' focusable='false'>
-  <rect width='520' height='160' fill='none'/>
-  <g>
-    <text x='0' y='96' font-family='Arial, Helvetica, sans-serif' font-size='106' font-weight='700' fill='#b3b5b8'>HP</text>
-    <circle cx='86' cy='58' r='10' fill='#e32a1f'/>
-    <text x='132' y='64' font-family='Arial, Helvetica, sans-serif' font-size='58' font-weight='300' fill='#9fa1a4'>Happy</text>
-    <text x='132' y='118' font-family='Arial, Helvetica, sans-serif' font-size='58' font-weight='300' fill='#9fa1a4'>Solutions</text>
-    <text x='102' y='150' font-family='Arial, Helvetica, sans-serif' font-size='24' font-style='italic' fill='#6f7175'>Experts of missing links</text>
-  </g>
-</svg>
-"""
+@lru_cache(maxsize=1)
+def _brand_logo_data_uri():
+    logo_path = Path(__file__).with_name("happysolutionslogo.jpeg")
+    if not logo_path.exists():
+        return ""
+    return "data:image/jpeg;base64,{}".format(base64.b64encode(logo_path.read_bytes()).decode("ascii"))
 
 
 def _brand_header_html(main_title, subtitle, action_href, action_label):
+    logo_src = _brand_logo_data_uri()
+    logo_html = (
+        "<img class='brand-logo-img' src='{src}' alt='Happy Solutions logo' aria-hidden='true'>".format(
+            src=_html_escape(logo_src)
+        )
+        if logo_src
+        else ""
+    )
     return (
         "<header class='brand-header'>"
         "<div class='brand-action-wrap'><a href='{action_href}' class='action-link'>{action_label}</a></div>"
@@ -163,7 +168,7 @@ def _brand_header_html(main_title, subtitle, action_href, action_label):
         action_label=_html_escape(action_label),
         main_title=_html_escape(main_title),
         subtitle=_html_escape(subtitle),
-        logo=_brand_logo_svg(),
+        logo=logo_html,
     )
 
 
@@ -393,8 +398,14 @@ def _rows_from_config(db_path):
     return rows
 
 
+def _latest_config_snapshot_ts(db_path):
+    snapshots = list_device_config_snapshots(db_path, AIO_CONFIG_FILE_NAME)
+    return max((int(row.get("fetched_ts", 0) or 0) for row in snapshots), default=0)
+
+
 def render_config_dashboard_html(db_path, message=""):
     config_rows = _rows_from_config(db_path)
+    latest_snapshot_ts = _latest_config_snapshot_ts(db_path)
     parts = [
         "<!doctype html>",
         "<html><head><meta charset='utf-8'>",
@@ -410,7 +421,7 @@ def render_config_dashboard_html(db_path, message=""):
         ".brand-title{margin:0;font-size:30px;line-height:1.1;color:#1f4f9b;font-weight:700;}",
         ".brand-subtitle{margin-top:6px;font-size:15px;line-height:1.2;color:#50678f;font-weight:600;letter-spacing:0.2px;}",
         ".brand-logo{justify-self:end;max-width:320px;width:100%;}",
-        ".brand-logo svg{display:block;width:100%;height:auto;}",
+        ".brand-logo-img{display:block;width:100%;height:auto;}",
         ".toolbar{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0 20px;}",
         ".search-box{background:#fff;border:2px solid #2a4b8d;padding:10px 12px;min-width:280px;}",
         ".search-box label{display:block;font-size:14px;margin-bottom:6px;}",
@@ -430,10 +441,20 @@ def render_config_dashboard_html(db_path, message=""):
         ".note{margin-top:12px;color:#45608d;font-size:13px;}",
         ".overlay{display:none;position:fixed;inset:0;background:rgba(22,35,59,0.6);z-index:9999;justify-content:center;align-items:center;flex-direction:column;color:#fff;}",
         ".spinner{width:48px;height:48px;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px;}",
+        ".toast{display:none;position:fixed;right:20px;bottom:20px;z-index:10000;max-width:360px;padding:14px 16px;border-radius:10px;color:#fff;box-shadow:0 12px 28px rgba(0,0,0,.18);font-weight:600;line-height:1.35;}",
+        ".toast.success{background:#1f7a3f;}",
+        ".toast.error{background:#b42318;}",
         "@keyframes spin{to{transform:rotate(360deg);}}",
         "@media (max-width: 900px){.brand-header{grid-template-columns:1fr;justify-items:center;}.brand-action-wrap,.brand-logo{justify-self:center;}.brand-copy{order:1;}.brand-action-wrap{order:2;}.brand-logo{order:3;max-width:260px;}.brand-title{font-size:26px;}.brand-subtitle{font-size:14px;}}",
         "</style>",
         "<script>",
+        "window.__CONFIG_BASELINE_TS__ = {};".format(latest_snapshot_ts),
+        "function ensureToast(){ var toast=document.getElementById('toast'); if(!toast){ toast=document.createElement('div'); toast.id='toast'; toast.className='toast'; document.body.appendChild(toast); } return toast; }",
+        "function showToast(message, kind){ var toast=ensureToast(); toast.className='toast ' + (kind || 'success'); toast.textContent=message; toast.style.display='block'; clearTimeout(window.__toastTimer); window.__toastTimer = setTimeout(function(){ toast.style.display='none'; }, 3500); }",
+        "function restoreToast(){ try { var message=sessionStorage.getItem('config_toast_message'); var kind=sessionStorage.getItem('config_toast_kind'); if(message){ sessionStorage.removeItem('config_toast_message'); sessionStorage.removeItem('config_toast_kind'); showToast(message, kind || 'success'); } } catch(e){} }",
+        "function showSpinner(message){ var overlay=document.getElementById('loading-overlay'); if(overlay){ overlay.style.display='flex'; var label=document.getElementById('loading-label'); if(label && message){ label.textContent=message; } } }",
+        "function hideSpinner(){ var overlay=document.getElementById('loading-overlay'); if(overlay){ overlay.style.display='none'; } }",
+        "function startConfigRefreshWatch(){ var baseline = window.__CONFIG_BASELINE_TS__ || 0; clearInterval(window.__configWatchTimer); window.__configWatchTimer = setInterval(function(){ fetch('/api/config/latest').then(function(res){ return res.json(); }).then(function(data){ if((data.latest_fetched_ts || 0) > baseline){ window.__CONFIG_BASELINE_TS__ = data.latest_fetched_ts || baseline; sessionStorage.setItem('config_toast_message', 'Configuration updated successfully.'); sessionStorage.setItem('config_toast_kind', 'success'); clearInterval(window.__configWatchTimer); window.location.reload(); } }).catch(function(){}); }, 2000); }",
         "function filterConfigRows(){",
         "  var uidTerm=(document.getElementById('uid-filter').value||'').toLowerCase();",
         "  var locTerm=(document.getElementById('location-filter').value||'').toLowerCase();",
@@ -446,18 +467,20 @@ def render_config_dashboard_html(db_path, message=""):
         "document.addEventListener('submit', function(e){",
         "  var form=e.target; var action=form.getAttribute('action')||''; var submitter=e.submitter||document.activeElement;",
         "  if(action.indexOf('/config/apply') !== -1 || action.indexOf('/config/read') !== -1){",
-        "    e.preventDefault(); showSpinner('Processing...');",
+        "    e.preventDefault(); showSpinner(action.indexOf('/config/apply') !== -1 ? 'Applying changes...' : 'Reading configuration...');",
         "    var formData=new FormData(form);",
         "    if(submitter && submitter.name){ formData.append(submitter.name, submitter.value); }",
         "    fetch(action,{method:'POST',body:new URLSearchParams(formData)}).then(function(res){",
         "      return res.text().then(function(text){ return {ok:res.ok, text:text}; });",
         "    }).then(function(result){",
-        "      hideSpinner(); document.open(); document.write(result.text); document.close();",
-        "    }).catch(function(err){ hideSpinner(); alert('Action failed: ' + err.message); });",
+        "      hideSpinner();",
+        "      if(!result.ok){ showToast('Configuration update failed.', 'error'); return; }",
+        "      showToast(action.indexOf('/config/apply') !== -1 ? 'Changes sent. Waiting for device refresh...' : 'Read request sent. Waiting for device response...', 'success');",
+        "      startConfigRefreshWatch();",
+        "    }).catch(function(err){ hideSpinner(); showToast('Action failed: ' + err.message, 'error'); });",
         "  }",
         "});",
-        "function showSpinner(){ var overlay=document.getElementById('loading-overlay'); if(overlay){ overlay.style.display='flex'; } }",
-        "function hideSpinner(){ var overlay=document.getElementById('loading-overlay'); if(overlay){ overlay.style.display='none'; } }",
+        "document.addEventListener('DOMContentLoaded', restoreToast);",
         "</script>",
         "</head><body data-theme='blue'><div class='shell'>",
         _brand_header_html(
@@ -471,8 +494,10 @@ def render_config_dashboard_html(db_path, message=""):
         "<div class='search-box'><label for='location-filter'>Search location</label><input id='location-filter' oninput='filterConfigRows()' placeholder='18.520 / 73.856'></div>",
         "</div>",
     ]
-    if message and not message.startswith("Saved and published to ") and not message.startswith("Read command sent to topic "):
-        parts.append("<div class='note'>{}</div>".format(_html_escape(message)))
+    if message:
+        message_lower = message.lower()
+        if "mqtt publish failed" in message_lower or "failed to publish" in message_lower or "required" in message_lower:
+            parts.append("<div class='note'>{}</div>".format(_html_escape(message)))
     parts.append("<table class='config-table'><thead><tr>")
     for field_name, label in CONFIG_COLUMNS:
         parts.append("<th>{}</th>".format(_html_escape(label)))
@@ -502,7 +527,8 @@ def render_config_dashboard_html(db_path, message=""):
     for row in config_rows:
         parts.append(_render_config_row(row))
     parts.append("</tbody></table>")
-    parts.append("<div id='loading-overlay' class='overlay'><div class='spinner'></div><div>Processing...</div></div>")
+    parts.append("<div id='loading-overlay' class='overlay'><div class='spinner'></div><div id='loading-label'>Processing...</div></div>")
+    parts.append("<div id='toast' class='toast'></div>")
     parts.append("</div></body></html>")
     return "".join(parts)
 
@@ -516,7 +542,7 @@ def _alarm_state(row):
 
 
 def _status_state(row):
-    return "alarm" if str(row.get("sh", "")).strip() == "0" else "healthy"
+    return "Sensor Disconnected" if str(row.get("sh", "")).strip() == "0" else "Healthy"
 
 
 def _config_map(db_path):
@@ -554,6 +580,7 @@ def _render_values_rows(rows, config_map):
         parts.append("<td><a href='/device/{0}'>{0}</a></td>".format(_html_escape(uid)))
         parts.append("<td>{}</td>".format(_html_escape(_format_time(row.get("observed_ts")))))
         parts.append("<td>{}</td>".format(_html_escape(_form_value(row.get("pv")))))
+        parts.append("<td>{}</td>".format(_html_escape(first_cfg.get("unit", ""))))
         parts.append("<td>{}</td>".format(_html_escape(_status_state(row))))
         parts.append("<td>{}</td>".format(_html_escape(_form_value(row.get("rssi")))))
         parts.append("<td>{}</td>".format(_html_escape(_alarm_state(row))))
@@ -565,13 +592,17 @@ def _render_values_rows(rows, config_map):
     return "".join(parts)
 
 
-def _render_history_rows(rows):
+def _render_history_rows(rows, config_map):
     parts = []
     for row in rows:
+        uid = row.get("uid", "")
+        config_rows = config_map.get(uid, [])
+        first_cfg = config_rows[0] if config_rows else {}
         parts.append("<tr class='history-row'>")
         parts.append("<td>{}</td>".format(_html_escape(_format_time(row.get("observed_ts")))))
         parts.append("<td>{}</td>".format(_html_escape(_format_time(row.get("device_ts")))))
         parts.append("<td>{}</td>".format(_html_escape(_form_value(row.get("pv")))))
+        parts.append("<td>{}</td>".format(_html_escape(first_cfg.get("unit", ""))))
         parts.append("<td>{}</td>".format(_html_escape(_form_value(row.get("rssi")))))
         parts.append("<td>{}</td>".format(_html_escape(_status_state(row))))
         parts.append("<td>{}</td>".format(_html_escape(_alarm_state(row))))
@@ -636,7 +667,7 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
         ".brand-title{margin:0;font-size:30px;line-height:1.1;color:#b45309;font-weight:700;}",
         ".brand-subtitle{margin-top:6px;font-size:15px;line-height:1.2;color:#8f561d;font-weight:600;letter-spacing:0.2px;}",
         ".brand-logo{justify-self:end;max-width:320px;width:100%;}",
-        ".brand-logo svg{display:block;width:100%;height:auto;}",
+        ".brand-logo-img{display:block;width:100%;height:auto;}",
         ".toolbar{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0 20px;}",
         ".search-box{background:#fff;border:2px solid #9f4d10;padding:10px 12px;min-width:280px;}",
         ".search-box label{display:block;font-size:14px;margin-bottom:6px;}",
@@ -667,7 +698,7 @@ def render_values_dashboard_html(db_path, latest_rows=None, page=1, per_page=20,
         parts.append("<th>{}</th>".format(_html_escape(label)))
     parts.append("</tr></thead><tbody id='values-body'>")
     if not rows:
-        parts.append("<tr><td colspan='10'>No telemetry received yet.</td></tr>")
+        parts.append("<tr><td colspan='11'>No telemetry received yet.</td></tr>")
     else:
         parts.append(_render_values_rows(rows, config_map))
     parts.append("</tbody></table>")
@@ -696,6 +727,7 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
     rows = history_rows if history_rows is not None else latest_telemetry_history(db_path, uid, limit=per_page, offset=(page - 1) * per_page)
     if total_rows is None:
         total_rows = count_telemetry_history_rows(db_path, uid) if history_rows is None else len(rows)
+    config_map = _config_map(db_path)
     parts = [
         "<!doctype html>",
         "<html><head><meta charset='utf-8'>",
@@ -707,21 +739,25 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
         ".back-btn{display:inline-block;margin-bottom:18px;padding:8px 14px;background:#e36c12;color:#fff;border-radius:2px;}",
         "h1{margin:0 0 16px 0;font-size:28px;color:#b45309;}",
         "h2{margin:22px 0 12px 0;font-size:20px;color:#b45309;}",
-        ".summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px;}",
-        ".tile{background:#fff;border:1px solid #f1c6a5;padding:12px 14px;}",
-        ".label{font-size:12px;color:#af611f;text-transform:uppercase;}",
-        ".value{font-size:20px;font-weight:bold;margin-top:6px;color:#a64910;}",
         ".value-table{width:100%;border-collapse:collapse;background:#fff;}",
         ".value-table th,.value-table td{border:1px solid #f1c6a5;padding:10px;vertical-align:top;font-size:13px;}",
         ".value-table th{background:#f07b24;color:#fff;text-align:left;}",
         ".history-row:nth-child(even){background:#fff7ef;}",
         ".pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0;}",
         ".pager a{color:#a94d10;text-decoration:none;font-weight:bold;}",
+        ".brand-header{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,1.2fr) minmax(220px,1fr);align-items:center;gap:16px;margin-bottom:18px;}",
+        ".brand-action-wrap{justify-self:start;}",
+        ".action-link{display:inline-block;padding:9px 14px;border-radius:999px;background:#ffffff;color:#b45309;text-decoration:none;font-weight:bold;border:1px solid #f1c6a5;box-shadow:0 2px 8px rgba(180,83,9,0.08);}",
+        ".brand-copy{text-align:center;}",
+        ".brand-title{margin:0;font-size:30px;line-height:1.1;color:#b45309;font-weight:700;}",
+        ".brand-subtitle{margin-top:6px;font-size:15px;line-height:1.2;color:#8f561d;font-weight:600;letter-spacing:0.2px;}",
+        ".brand-logo{justify-self:end;max-width:320px;width:100%;}",
+        ".brand-logo-img{display:block;width:100%;height:auto;}",
+        "@media (max-width: 900px){.brand-header{grid-template-columns:1fr;justify-items:center;}.brand-action-wrap,.brand-logo{justify-self:center;}.brand-copy{order:1;}.brand-action-wrap{order:2;}.brand-logo{order:3;max-width:260px;}.brand-title{font-size:26px;}.brand-subtitle{font-size:14px;}}",
         "</style>",
         _history_dashboard_script(uid),
         "</head><body data-theme='orange'>",
-        "<a class='back-btn' href='/'>&larr; Back to Dashboard</a>",
-        "<h1>Device Details: {}</h1>".format(_html_escape(uid)),
+        _brand_header_html("Device Details", uid, "/", "Back to Dashboard"),
     ]
     if latest is None:
         parts.append("<p>No data for this UID.</p>")
@@ -742,13 +778,13 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
         )
     parts.append("<h2>Recent Telemetry Samples</h2>")
     parts.append("<table class='value-table'><thead><tr>")
-    for label in ["Observed Time", "Device Time", "Value", "RSSI", "Status", "Alarm"]:
+    for label in ["Observed Time", "Device Time", "Value", "Unit", "RSSI", "Sensor Status", "Alarm"]:
         parts.append("<th>{}</th>".format(_html_escape(label)))
     parts.append("</tr></thead><tbody id='history-body'>")
     if not rows:
-        parts.append("<tr><td colspan='6'>No history available.</td></tr>")
+        parts.append("<tr><td colspan='7'>No history available.</td></tr>")
     else:
-        parts.append(_render_history_rows(rows))
+        parts.append(_render_history_rows(rows, config_map))
     parts.append("</tbody></table>")
     parts.append(_page_controls("/device/{}".format(_html_escape(uid)), page, per_page, total_rows))
     parts.append("</body></html>")
@@ -818,28 +854,14 @@ def handle_config_apply(db_path, form):
     if not uid:
         return {"ok": False, "message": "UID is required"}
 
-    upsert_device_config(db_path, row)
-    existing = _snapshot_from_row(db_path, uid) or {}
-    config_rows = list_device_configs(db_path, uid=uid)
-    config_object = build_device_config_object(uid, config_rows, snapshot_object=existing)
     patch_values = _patch_values_from_form(form)
 
     try:
         topic = publish_rpc_request(build_patch_config_payload(uid, patch_values), uid, _mqtt_settings_from_env())
     except Exception as exc:
-        return {"ok": False, "message": "Config saved locally, but MQTT publish failed: {}".format(exc)}
+        return {"ok": False, "message": "Failed to publish config changes: {}".format(exc)}
 
-    upsert_device_config_snapshot(
-        db_path,
-        {
-            "uid": uid,
-            "file_name": AIO_CONFIG_FILE_NAME,
-            "raw_json": json.dumps(config_object, separators=(",", ":")),
-            "source_topic": topic,
-        },
-    )
-    replace_device_config_rows(db_path, uid, config_rows)
-    return {"ok": True, "message": "Saved and published to {}".format(topic)}
+    return {"ok": True, "message": "Changes published to {}".format(topic)}
 
 
 def handle_config_read(form):
@@ -866,12 +888,23 @@ def telemetry_latest_json(db_path, page=1, per_page=20):
 
 def telemetry_history_json(db_path, uid, page=1, per_page=25):
     rows, total = _history_rows(db_path, uid, page, per_page)
+    config_map = _config_map(db_path)
     return {
         "uid": uid,
         "page": page,
         "per_page": per_page,
         "total": total,
-        "html": _render_history_rows(rows),
+        "html": _render_history_rows(rows, config_map),
+    }
+
+
+def config_latest_json(db_path):
+    snapshots = list_device_config_snapshots(db_path, AIO_CONFIG_FILE_NAME)
+    latest = max(snapshots, key=lambda row: int(row.get("fetched_ts", 0) or 0), default=None)
+    return {
+        "latest_fetched_ts": int((latest or {}).get("fetched_ts", 0) or 0),
+        "snapshot_count": len(snapshots),
+        "latest_uid": (latest or {}).get("uid", ""),
     }
 
 
@@ -906,6 +939,11 @@ def create_wsgi_app(db_path):
             page = int(query.get("page", "1") or "1")
             per_page = int(query.get("per_page", "25") or "25")
             payload = telemetry_history_json(db_path, uid, page=page, per_page=per_page)
+            start_response("200 OK", [("Content-Type", "application/json")])
+            return [_json_response(payload)]
+
+        if method == "GET" and path == "/api/config/latest":
+            payload = config_latest_json(db_path)
             start_response("200 OK", [("Content-Type", "application/json")])
             return [_json_response(payload)]
 

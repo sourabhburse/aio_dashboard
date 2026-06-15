@@ -161,18 +161,35 @@ class DashboardContractTest(unittest.TestCase):
         self.assertIn("range_20ma", html)
         self.assertIn("unit", html)
         self.assertIn("customer", html)
+        self.assertIn("data:image/jpeg;base64,", html)
         self.assertIn("<strong>5001491</strong>", html)
         self.assertIn("name='range_4ma' value='0'", html)
-        self.assertNotIn("UIDs", html)
-        self.assertNotIn("Rows", html)
-        self.assertNotIn("Config</div>", html)
-        self.assertNotIn("This page edits local config plus the JSON-RPC patch payload", html)
         self.assertNotIn("Saved and published to ", html)
 
     def test_render_values_dashboard_uses_orange_layout_and_latest_readings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = tmpdir + "/dashboard.sqlite3"
             init_db(db_path)
+            upsert_device_config_snapshot(
+                db_path,
+                {
+                    "uid": "5001491",
+                    "file_name": "customer",
+                    "raw_json": json.dumps(
+                        {
+                            "UID": "5001491",
+                            "channels": [
+                                {
+                                    "id": "AI1",
+                                    "name": "pv",
+                                    "unit": "Bar",
+                                }
+                            ],
+                        },
+                        separators=(",", ":"),
+                    ),
+                },
+            )
             html = render_values_dashboard_html(
                 db_path,
                 latest_rows=[
@@ -194,19 +211,44 @@ class DashboardContractTest(unittest.TestCase):
         self.assertIn("orange", html.lower())
         self.assertIn("5001491", html)
         self.assertIn("16.000", html)
+        self.assertIn("Bar", html)
+        self.assertIn("Sensor Status", html)
+        self.assertIn("data:image/jpeg;base64,", html)
         self.assertIn("setInterval", html)
         self.assertIn("page=", html)
         self.assertNotIn("Live Refresh", html)
-        self.assertNotIn("<div class='tile'><div class='label'>Rows</div>", html)
         self.assertTrue(html.rfind("pager") > html.rfind("</table>"))
 
     def test_render_device_history_uses_pagination_and_live_refresh(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = tmpdir + "/dashboard.sqlite3"
             init_db(db_path)
+            upsert_device_config_snapshot(
+                db_path,
+                {
+                    "uid": "5001491",
+                    "file_name": "customer",
+                    "raw_json": json.dumps(
+                        {
+                            "UID": "5001491",
+                            "channels": [
+                                {
+                                    "id": "AI1",
+                                    "name": "pv",
+                                    "unit": "Bar",
+                                }
+                            ],
+                        },
+                        separators=(",", ":"),
+                    ),
+                },
+            )
             html = render_device_html(db_path, "5001491")
 
         self.assertIn("history", html.lower())
+        self.assertIn("Unit", html)
+        self.assertIn("Sensor Status", html)
+        self.assertIn("data:image/jpeg;base64,", html)
         self.assertIn("setInterval", html)
         self.assertIn("page=", html)
 

@@ -23,6 +23,13 @@ def _rpc_response_topic():
     return os.environ.get("AIO_RPC_RESPONSE_TOPIC", "device/+/rpc/res")
 
 
+def _uid_from_rpc_topic(topic):
+    parts = str(topic or "").split("/")
+    if len(parts) >= 4 and parts[0] == "device" and parts[2] == "rpc" and parts[3] == "res":
+        return parts[1].strip()
+    return ""
+
+
 def _jsonrpc_request(method, params, request_id):
     payload = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
     return payload
@@ -102,15 +109,16 @@ def check_and_trigger_config_request(db_path, client, sample):
         if snapshot is not None:
             return
 
-        payload = _jsonrpc_request(
-            "read_file",
-            {"name": "customer"},
-            2,
-        )
-        topic = _rpc_request_topic(sample.uid)
-        client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=1)
+        publish_config_read_request(client, sample.uid)
     except Exception as exc:
         print("Failed to auto-request configuration: {}".format(exc))
+
+
+def publish_config_read_request(client, uid):
+    payload = _jsonrpc_request("read_file", {"name": "customer"}, 2)
+    topic = _rpc_request_topic(uid)
+    client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=1)
+    return topic
 
 
 def process_payload(db_path, payload_text):
@@ -171,6 +179,11 @@ def process_config_payload(db_path, payload_text, topic="", file_name="customer"
         return None
 
 
+def _should_refresh_config_from_patch(payload):
+    result = payload.get("result") or {}
+    return isinstance(result, dict) and bool(result.get("patched")) and bool(result.get("reloaded"))
+
+
 def start_mqtt_ingest(db_path=None):
     if db_path is None:
         db_path = os.environ.get("AIO_DB_PATH", "aio_dashboard.sqlite3")
@@ -199,6 +212,17 @@ def start_mqtt_ingest(db_path=None):
     def on_message(client, userdata, msg):
         payload_text = msg.payload.decode("utf-8", errors="ignore")
         if mqtt.topic_matches_sub(response_topic, msg.topic):
+            payload = None
+            try:
+                payload = json.loads(payload_text)
+            except Exception:
+                payload = None
+
+            if payload and _should_refresh_config_from_patch(payload):
+                uid = _uid_from_rpc_topic(msg.topic)
+                if uid:
+                    publish_config_read_request(client, uid)
+
             process_config_payload(db_path, payload_text, topic=msg.topic, file_name="customer")
             return
         try:
