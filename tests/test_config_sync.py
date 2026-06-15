@@ -4,7 +4,9 @@ import unittest
 
 from aio_dashboard.db import (
     init_db,
+    list_device_configs,
     latest_device_config_snapshot,
+    upsert_device_config,
     upsert_device_config_snapshot,
 )
 from aio_dashboard.mqtt_ingest import process_config_payload
@@ -127,6 +129,52 @@ class DeviceConfigSyncTest(unittest.TestCase):
         self.assertEqual(snapshot["file_name"], "customer")
         self.assertEqual(snapshot["uid"], "5001491")
         self.assertIn('"channels":[{"name":"pv"}]', snapshot["raw_json"])
+
+    def test_process_config_payload_preserves_local_unit_when_device_response_omits_it(self):
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "name": "customer",
+                "content": json.dumps(
+                    {
+                        "UID": "5001491",
+                        "channels": [
+                            {
+                                "id": "AI1",
+                                "name": "pv",
+                                "range_4ma": 0.0,
+                                "range_20ma": 10.0,
+                            }
+                        ],
+                    }
+                ),
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = tmpdir + "/dashboard.sqlite3"
+            init_db(db_path)
+            upsert_device_config(
+                db_path,
+                {
+                    "uid": "5001491",
+                    "channel": "AI1",
+                    "name": "pv",
+                    "unit": "Bar",
+                    "range_4ma": "0",
+                    "range_20ma": "10",
+                },
+            )
+            process_config_payload(
+                db_path,
+                json.dumps(payload),
+                topic="device/5001491/rpc/res",
+                file_name="customer",
+            )
+            rows = list_device_configs(db_path, uid="5001491")
+
+        self.assertEqual(rows[0]["unit"], "Bar")
 
 
 if __name__ == "__main__":

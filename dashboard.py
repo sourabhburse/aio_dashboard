@@ -859,6 +859,7 @@ def handle_config_apply(db_path, form):
     if not uid:
         return {"ok": False, "message": "UID is required"}
 
+    upsert_device_config(db_path, row)
     patch_values = _patch_values_from_form(form)
 
     try:

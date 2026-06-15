@@ -7,6 +7,7 @@ from aio_dashboard.db import (
     save_telemetry,
     upsert_device_config_snapshot,
     latest_device_config_snapshot,
+    list_device_configs,
 )
 from aio_dashboard.parsing import (
     parse_device_config_response,
@@ -56,6 +57,17 @@ def _channel_row_from_snapshot(uid, channel, index, device):
         "sensor_health_threshold_ma": channel.get("sensor_health_threshold_ma", ""),
         "sensor_health_hysteresis_ma": channel.get("sensor_health_hysteresis_ma", ""),
     }
+
+
+def _local_units_by_channel(db_path, uid):
+    existing_rows = list_device_configs(db_path, uid=uid)
+    units = {}
+    for row in existing_rows:
+        channel = str(row.get("channel", "") or "").strip()
+        unit = str(row.get("unit", "") or "").strip()
+        if channel and unit:
+            units[channel] = unit
+    return units
 
 
 def _assign_path(root, path, value):
@@ -164,13 +176,18 @@ def process_config_payload(db_path, payload_text, topic="", file_name="customer"
         if not uid:
             return None
 
+        local_units = _local_units_by_channel(db_path, uid)
         upsert_device_config_snapshot(db_path, snapshot)
 
         device = config_object or {}
         channels = device.get("channels") or []
         rows = []
         for index, channel in enumerate(channels):
-            rows.append(_channel_row_from_snapshot(uid, channel or {}, index, device))
+            row = _channel_row_from_snapshot(uid, channel or {}, index, device)
+            channel_id = row.get("channel", "")
+            if not row.get("unit") and local_units.get(channel_id):
+                row["unit"] = local_units[channel_id]
+            rows.append(row)
         if rows:
             replace_device_config_rows(db_path, uid, rows)
         return snapshot

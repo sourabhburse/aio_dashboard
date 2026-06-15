@@ -6,6 +6,7 @@ from aio_dashboard.db import init_db, upsert_device_config_snapshot
 from aio_dashboard.dashboard import (
     build_patch_config_payload,
     build_device_config_object,
+    _patch_values_from_form,
     render_config_dashboard_html,
     render_values_dashboard_html,
     render_device_html,
@@ -23,6 +24,26 @@ class DashboardContractTest(unittest.TestCase):
         self.assertEqual(payload["method"], "patch_config")
         self.assertEqual(payload["params"]["name"], "customer")
         self.assertEqual(payload["params"]["values"]["channels.0.range_20ma"], 25.0)
+
+    def test_patch_values_from_form_keeps_unit_local_and_preserves_zero_values(self):
+        values = _patch_values_from_form(
+            {
+                "channel_index": "0",
+                "lat": "18.520",
+                "long": "73.856",
+                "unit": "Bar",
+                "range_4ma": "0",
+                "range_20ma": "10",
+                "calibration_offset_ma": "0",
+                "high_threshold": "8.0",
+                "low_threshold": "2.0",
+                "hysteresis": "0.5",
+            }
+        )
+
+        self.assertNotIn("channels.0.unit", values)
+        self.assertEqual(values["channels.0.range_4ma"], 0)
+        self.assertEqual(values["channels.0.calibration_offset_ma"], 0)
 
     def test_build_device_config_object_preserves_device_snapshot_and_all_channels(self):
         snapshot_object = {
@@ -164,6 +185,7 @@ class DashboardContractTest(unittest.TestCase):
         self.assertIn("data:image/jpeg;base64,", html)
         self.assertIn("<strong>5001491</strong>", html)
         self.assertIn("name='range_4ma' value='0'", html)
+        self.assertIn("name='unit' value='Bar'", html)
         self.assertNotIn("Saved and published to ", html)
 
     def test_render_values_dashboard_uses_orange_layout_and_latest_readings(self):
