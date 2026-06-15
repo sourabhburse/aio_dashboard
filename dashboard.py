@@ -769,7 +769,7 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
         parts.append(
             "<div class='summary'>"
             "<div class='tile'><div class='label'>UID</div><div class='value'>{}</div></div>"
-            "<div class='tile'><div class='label'>Status</div><div class='value'>{}</div></div>"
+            "<div class='tile'><div class='label'>Sensor Status</div><div class='value'>{}</div></div>"
             "<div class='tile'><div class='label'>Lat</div><div class='value'>{}</div></div>"
             "<div class='tile'><div class='label'>Long</div><div class='value'>{}</div></div>"
             "<div class='tile'><div class='label'>Value</div><div class='value'>{}</div></div>"
@@ -781,7 +781,7 @@ def render_device_html(db_path, uid, page=1, per_page=25, history_rows=None, tot
                 _html_escape(_form_value(latest.get("pv", ""))),
             )
         )
-    parts.append("<h2>Recent Telemetry Samples</h2>")
+    parts.append("<h2>Recent Telemetry Data</h2>")
     parts.append("<table class='value-table'><thead><tr>")
     for label in ["Observed Time", "Device Time", "Value", "Unit", "RSSI", "Sensor Status", "Alarm"]:
         parts.append("<th>{}</th>".format(_html_escape(label)))
